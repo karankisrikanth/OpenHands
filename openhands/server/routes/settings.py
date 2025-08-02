@@ -127,6 +127,13 @@ async def store_llm_settings(
         # Keep existing search API key if not provided
         if settings.search_api_key is None:
             settings.search_api_key = existing_settings.search_api_key
+        # Keep existing webhook settings if not provided
+        if settings.webhook_secret is None:
+            settings.webhook_secret = existing_settings.webhook_secret
+        if settings.webhook_allowed_repos is None:
+            settings.webhook_allowed_repos = existing_settings.webhook_allowed_repos
+        if settings.webhook_auto_fix is None:
+            settings.webhook_auto_fix = existing_settings.webhook_auto_fix
 
     return settings
 
@@ -194,6 +201,7 @@ def convert_to_settings(settings_with_token_data: Settings) -> Settings:
     # Convert the API keys to `SecretStr` instances
     filtered_settings_data['llm_api_key'] = settings_with_token_data.llm_api_key
     filtered_settings_data['search_api_key'] = settings_with_token_data.search_api_key
+    filtered_settings_data['webhook_secret'] = settings_with_token_data.webhook_secret
 
     # Create a new Settings instance
     settings = Settings(**filtered_settings_data)

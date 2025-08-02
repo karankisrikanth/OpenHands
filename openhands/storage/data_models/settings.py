@@ -48,7 +48,7 @@ class Settings(BaseModel):
     # Webhook settings
     webhook_secret: SecretStr | None = None
     webhook_allowed_repos: str | None = None
-    webhook_auto_fix: bool = False
+    webhook_auto_fix: bool | None = None
 
     model_config = ConfigDict(
         validate_assignment=True,

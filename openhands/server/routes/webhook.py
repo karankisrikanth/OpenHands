@@ -137,7 +137,7 @@ async def handle_github_webhook(
             repo_full_name=repo_full_name, 
             pr_number=pr_number, 
             action=action,
-            auto_fix=settings.webhook_auto_fix
+            auto_fix=settings.webhook_auto_fix or False
         )
 
         return {
@@ -164,5 +164,5 @@ async def webhook_health(settings: Settings = Depends(get_user_settings)):
         'status': 'healthy',
         'webhook_secret_configured': bool(settings.webhook_secret),
         'allowed_repos_configured': bool(settings.webhook_allowed_repos),
-        'auto_fix_enabled': settings.webhook_auto_fix,
+        'auto_fix_enabled': settings.webhook_auto_fix or False,
     }
