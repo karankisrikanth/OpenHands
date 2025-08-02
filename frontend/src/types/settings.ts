@@ -49,6 +49,10 @@ export type Settings = {
   MAX_BUDGET_PER_TASK: number | null;
   EMAIL?: string;
   EMAIL_VERIFIED?: boolean;
+  // Webhook settings
+  webhook_secret_set: boolean;
+  webhook_allowed_repos: string | null;
+  webhook_auto_fix: boolean;
 };
 
 export type ApiSettings = {
@@ -75,6 +79,10 @@ export type ApiSettings = {
   };
   email?: string;
   email_verified?: boolean;
+  // Webhook settings
+  webhook_secret_set: boolean;
+  webhook_allowed_repos: string | null;
+  webhook_auto_fix: boolean;
 };
 
 export type PostSettings = Settings & {
@@ -82,10 +90,12 @@ export type PostSettings = Settings & {
   llm_api_key?: string | null;
   search_api_key?: string;
   mcp_config?: MCPConfig;
+  webhook_secret?: string | null;
 };
 
 export type PostApiSettings = ApiSettings & {
   user_consents_to_analytics: boolean | null;
   search_api_key?: string;
   mcp_config?: MCPConfig;
+  webhook_secret?: string | null;
 };

@@ -14,6 +14,9 @@ from openhands.server.routes.webhook import (
     is_repository_allowed,
     verify_webhook_signature,
 )
+from openhands.server.settings import Settings
+from openhands.server.user_auth import get_user_settings
+from openhands.server.dependencies import check_session_api_key
 
 
 class TestWebhookSignatureVerification:
@@ -54,31 +57,27 @@ class TestRepositoryAllowlist:
 
     def test_is_repository_allowed_empty_list(self):
         """Test repository check with empty allowlist."""
-        with patch.dict(os.environ, {'WEBHOOK_ALLOWED_REPOS': ''}):
-            assert is_repository_allowed('owner/repo') is False
+        assert is_repository_allowed('any/repo', '') is True
 
     def test_is_repository_allowed_single_repo(self):
         """Test repository check with single allowed repo."""
-        with patch.dict(os.environ, {'WEBHOOK_ALLOWED_REPOS': 'owner/repo'}):
-            assert is_repository_allowed('owner/repo') is True
-            assert is_repository_allowed('other/repo') is False
+        assert is_repository_allowed('owner/repo', 'owner/repo') is True
+        assert is_repository_allowed('other/repo', 'owner/repo') is False
 
     def test_is_repository_allowed_multiple_repos(self):
         """Test repository check with multiple allowed repos."""
         allowed_repos = 'owner1/repo1,owner2/repo2,owner3/repo3'
-        with patch.dict(os.environ, {'WEBHOOK_ALLOWED_REPOS': allowed_repos}):
-            assert is_repository_allowed('owner1/repo1') is True
-            assert is_repository_allowed('owner2/repo2') is True
-            assert is_repository_allowed('owner3/repo3') is True
-            assert is_repository_allowed('other/repo') is False
+        assert is_repository_allowed('owner1/repo1', allowed_repos) is True
+        assert is_repository_allowed('owner2/repo2', allowed_repos) is True
+        assert is_repository_allowed('owner3/repo3', allowed_repos) is True
+        assert is_repository_allowed('other/repo', allowed_repos) is False
 
     def test_is_repository_allowed_with_spaces(self):
         """Test repository check with spaces in configuration."""
         allowed_repos = 'owner1/repo1, owner2/repo2 , owner3/repo3'
-        with patch.dict(os.environ, {'WEBHOOK_ALLOWED_REPOS': allowed_repos}):
-            assert is_repository_allowed('owner1/repo1') is True
-            assert is_repository_allowed('owner2/repo2') is True
-            assert is_repository_allowed('owner3/repo3') is True
+        assert is_repository_allowed('owner1/repo1', allowed_repos) is True
+        assert is_repository_allowed('owner2/repo2', allowed_repos) is True
+        assert is_repository_allowed('owner3/repo3', allowed_repos) is True
 
 
 class TestWebhookEndpoints:
@@ -86,7 +85,28 @@ class TestWebhookEndpoints:
 
     def setup_method(self):
         """Set up test client."""
+        # Mock settings for testing
+        self.mock_settings = Settings(
+            webhook_secret='test-secret',
+            webhook_allowed_repos='test/repo',
+            webhook_auto_fix=False
+        )
+        
+        # Override the dependencies for testing
+        def mock_get_user_settings():
+            return self.mock_settings
+        
+        def mock_check_session_api_key():
+            return None  # Skip authentication for testing
+        
+        app.dependency_overrides[get_user_settings] = mock_get_user_settings
+        app.dependency_overrides[check_session_api_key] = mock_check_session_api_key
         self.client = TestClient(app)
+    
+    def teardown_method(self):
+        """Clean up after test."""
+        # Clear dependency overrides
+        app.dependency_overrides.clear()
 
     def test_webhook_health_endpoint(self):
         """Test webhook health check endpoint."""
@@ -99,10 +119,6 @@ class TestWebhookEndpoints:
         assert 'allowed_repos_configured' in data
         assert 'auto_fix_enabled' in data
 
-    @patch.dict(
-        os.environ,
-        {'WEBHOOK_SECRET': 'test-secret', 'WEBHOOK_ALLOWED_REPOS': 'test/repo'},
-    )
     @patch('openhands.server.routes.webhook.PRReviewerService')
     def test_github_webhook_valid_pr_opened(self, mock_pr_reviewer):
         """Test valid GitHub webhook for PR opened event."""
@@ -149,24 +165,35 @@ class TestWebhookEndpoints:
 
     def test_github_webhook_missing_secret(self):
         """Test GitHub webhook without configured secret."""
-        with patch.dict(os.environ, {}, clear=True):
-            payload = {'action': 'opened'}
-            payload_bytes = json.dumps(payload).encode('utf-8')
+        # Override settings with no secret for this test
+        mock_settings = Settings(
+            webhook_secret=None,
+            webhook_allowed_repos='test/repo',
+            webhook_auto_fix=False
+        )
+        
+        def mock_get_user_settings():
+            return mock_settings
+        
+        app.dependency_overrides[get_user_settings] = mock_get_user_settings
+        
+        payload = {'action': 'opened'}
+        payload_bytes = json.dumps(payload).encode('utf-8')
 
-            response = self.client.post(
-                '/api/webhook/github',
-                content=payload_bytes,
-                headers={
-                    'X-Hub-Signature-256': 'sha256=invalid',
-                    'X-GitHub-Event': 'pull_request',
-                },
-            )
+        response = self.client.post(
+            '/api/webhook/github',
+            content=payload_bytes,
+            headers={
+                'X-Hub-Signature-256': 'sha256=invalid',
+                'X-GitHub-Event': 'pull_request',
+            },
+        )
 
-            assert response.status_code == 500
+        assert response.status_code == 500
 
-    @patch.dict(os.environ, {'WEBHOOK_SECRET': 'test-secret'})
     def test_github_webhook_invalid_signature(self):
         """Test GitHub webhook with invalid signature."""
+        
         payload = {'action': 'opened'}
         payload_bytes = json.dumps(payload).encode('utf-8')
 
@@ -181,12 +208,20 @@ class TestWebhookEndpoints:
 
         assert response.status_code == 401
 
-    @patch.dict(
-        os.environ,
-        {'WEBHOOK_SECRET': 'test-secret', 'WEBHOOK_ALLOWED_REPOS': 'allowed/repo'},
-    )
     def test_github_webhook_repository_not_allowed(self):
         """Test GitHub webhook for repository not in allowlist."""
+        # Override settings with different allowed repo for this test
+        mock_settings = Settings(
+            webhook_secret='test-secret',
+            webhook_allowed_repos='allowed/repo',
+            webhook_auto_fix=False
+        )
+        
+        def mock_get_user_settings():
+            return mock_settings
+        
+        app.dependency_overrides[get_user_settings] = mock_get_user_settings
+        
         payload = {'action': 'opened', 'repository': {'full_name': 'not-allowed/repo'}}
         payload_bytes = json.dumps(payload).encode('utf-8')
         signature = hmac.new(b'test-secret', payload_bytes, hashlib.sha256).hexdigest()
@@ -205,12 +240,9 @@ class TestWebhookEndpoints:
         assert data['status'] == 'ignored'
         assert 'not in allowed list' in data['reason']
 
-    @patch.dict(
-        os.environ,
-        {'WEBHOOK_SECRET': 'test-secret', 'WEBHOOK_ALLOWED_REPOS': 'test/repo'},
-    )
     def test_github_webhook_non_pr_event(self):
         """Test GitHub webhook for non-PR event."""
+        
         payload = {'action': 'opened'}
         payload_bytes = json.dumps(payload).encode('utf-8')
         signature = hmac.new(b'test-secret', payload_bytes, hashlib.sha256).hexdigest()
@@ -229,12 +261,9 @@ class TestWebhookEndpoints:
         assert data['status'] == 'ignored'
         assert 'not a pull request event' in data['reason']
 
-    @patch.dict(
-        os.environ,
-        {'WEBHOOK_SECRET': 'test-secret', 'WEBHOOK_ALLOWED_REPOS': 'test/repo'},
-    )
     def test_github_webhook_ignored_pr_action(self):
         """Test GitHub webhook for ignored PR action."""
+        
         payload = {
             'action': 'closed',  # Not handled action
             'repository': {'full_name': 'test/repo'},

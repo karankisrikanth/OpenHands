@@ -18,7 +18,6 @@ class PRReviewerService:
 
     def __init__(self):
         self.github_service = None
-        self.auto_fix_enabled = os.getenv('WEBHOOK_AUTO_FIX', 'false').lower() == 'true'
 
     async def _get_github_service(self) -> GitHubService:
         """Get GitHub service instance with authentication."""
@@ -33,7 +32,7 @@ class PRReviewerService:
         return self.github_service
 
     async def review_pull_request(
-        self, repo_full_name: str, pr_number: int, action: str
+        self, repo_full_name: str, pr_number: int, action: str, auto_fix: bool = False
     ) -> dict[str, Any]:
         """Review a pull request and post comments."""
         try:
@@ -68,7 +67,7 @@ class PRReviewerService:
                 initial_user_msg=review_message,
                 image_urls=None,
                 replay_json=None,
-                conversation_instructions=self._get_review_instructions(),
+                conversation_instructions=self._get_review_instructions(auto_fix),
                 conversation_trigger=ConversationTrigger.WEBHOOK,
                 attach_convo_id=True,
                 git_provider=ProviderType.GITHUB,
@@ -183,7 +182,7 @@ After the review, if significant issues are found and auto-fix is enabled, you m
 
         return message
 
-    def _get_review_instructions(self) -> str:
+    def _get_review_instructions(self, auto_fix: bool = False) -> str:
         """Get conversation instructions for PR review."""
         instructions = """You are conducting an automated code review for a GitHub pull request.
 
@@ -200,7 +199,7 @@ Guidelines:
 - Consider the context of the entire codebase when possible
 - Prioritize security and correctness issues over style preferences"""
 
-        if self.auto_fix_enabled:
+        if auto_fix:
             instructions += """
 - If you find significant issues, you may suggest specific code fixes
 - Provide clear explanations for any suggested changes"""
