@@ -1711,6 +1711,22 @@
         "de": "API-Schlüssel",
         "uk": "API ключі"
     },
+    "SETTINGS$NAV_WEBHOOK": {
+        "en": "Webhook",
+        "ja": "Webhook",
+        "zh-CN": "Webhook",
+        "zh-TW": "Webhook",
+        "ko-KR": "Webhook",
+        "no": "Webhook",
+        "it": "Webhook",
+        "pt": "Webhook",
+        "es": "Webhook",
+        "ar": "Webhook",
+        "fr": "Webhook",
+        "tr": "Webhook",
+        "de": "Webhook",
+        "uk": "Webhook"
+    },
     "SETTINGS$GITHUB": {
         "en": "GitHub",
         "ja": "GitHub",

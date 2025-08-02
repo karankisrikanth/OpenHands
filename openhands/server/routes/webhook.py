@@ -6,13 +6,16 @@ import json
 import os
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from openhands.core.logger import openhands_logger as logger
+from openhands.server.dependencies import get_dependencies
 from openhands.server.services.pr_reviewer import PRReviewerService
+from openhands.server.user_auth import get_user_settings
+from openhands.storage.data_models.settings import Settings
 
-app = APIRouter(prefix='/api/webhook', tags=['webhook'])
+app = APIRouter(prefix='/api/webhook', tags=['webhook'], dependencies=get_dependencies())
 
 
 class WebhookPayload(BaseModel):
@@ -41,24 +44,25 @@ def verify_webhook_signature(
     return hmac.compare_digest(expected_signature, received_signature)
 
 
-def is_repository_allowed(repo_full_name: str) -> bool:
+def is_repository_allowed(repo_full_name: str, allowed_repos: str | None) -> bool:
     """Check if repository is in the allowed list."""
-    allowed_repos = os.getenv('WEBHOOK_ALLOWED_REPOS', '')
-    if not allowed_repos:
-        return False
+    if not allowed_repos or allowed_repos.strip() == '':
+        return True  # Allow all repositories if no restriction is set
 
     allowed_list = [repo.strip() for repo in allowed_repos.split(',')]
     return repo_full_name in allowed_list
 
 
 @app.post('/github')
-async def handle_github_webhook(request: Request):
+async def handle_github_webhook(
+    request: Request, settings: Settings = Depends(get_user_settings)
+):
     """Handle GitHub webhook events for PR reviews."""
     try:
-        # Get webhook secret from environment
-        webhook_secret = os.getenv('WEBHOOK_SECRET')
+        # Get webhook secret from settings
+        webhook_secret = settings.webhook_secret.get_secret_value() if settings.webhook_secret else None
         if not webhook_secret:
-            logger.warning('WEBHOOK_SECRET not configured, rejecting webhook')
+            logger.warning('Webhook secret not configured, rejecting webhook')
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail='Webhook secret not configured',
@@ -97,7 +101,7 @@ async def handle_github_webhook(request: Request):
         repo_full_name = repository.get('full_name', '')
 
         # Check if repository is allowed
-        if not is_repository_allowed(repo_full_name):
+        if not is_repository_allowed(repo_full_name, settings.webhook_allowed_repos):
             logger.info(f'Repository not allowed: {repo_full_name}')
             return {'status': 'ignored', 'reason': 'repository not in allowed list'}
 
@@ -130,7 +134,10 @@ async def handle_github_webhook(request: Request):
 
         # Start PR review process
         review_result = await pr_reviewer.review_pull_request(
-            repo_full_name=repo_full_name, pr_number=pr_number, action=action
+            repo_full_name=repo_full_name, 
+            pr_number=pr_number, 
+            action=action,
+            auto_fix=settings.webhook_auto_fix
         )
 
         return {
@@ -151,11 +158,11 @@ async def handle_github_webhook(request: Request):
 
 
 @app.get('/health')
-async def webhook_health():
+async def webhook_health(settings: Settings = Depends(get_user_settings)):
     """Health check endpoint for webhook service."""
     return {
         'status': 'healthy',
-        'webhook_secret_configured': bool(os.getenv('WEBHOOK_SECRET')),
-        'allowed_repos_configured': bool(os.getenv('WEBHOOK_ALLOWED_REPOS')),
-        'auto_fix_enabled': os.getenv('WEBHOOK_AUTO_FIX', 'false').lower() == 'true',
+        'webhook_secret_configured': bool(settings.webhook_secret),
+        'allowed_repos_configured': bool(settings.webhook_allowed_repos),
+        'auto_fix_enabled': settings.webhook_auto_fix,
     }

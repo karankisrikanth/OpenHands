@@ -26,6 +26,10 @@ export const DEFAULT_SETTINGS: Settings = {
     sse_servers: [],
     stdio_servers: [],
   },
+  // Webhook settings
+  webhook_secret_set: false,
+  webhook_allowed_repos: null,
+  webhook_auto_fix: false,
 };
 
 /**

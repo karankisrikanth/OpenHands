@@ -68,11 +68,14 @@ async def load_settings(
             and bool(settings.llm_api_key),
             search_api_key_set=settings.search_api_key is not None
             and bool(settings.search_api_key),
+            webhook_secret_set=settings.webhook_secret is not None
+            and bool(settings.webhook_secret),
             provider_tokens_set=provider_tokens_set,
         )
         settings_with_token_data.llm_api_key = None
         settings_with_token_data.search_api_key = None
         settings_with_token_data.sandbox_api_key = None
+        settings_with_token_data.webhook_secret = None
         return settings_with_token_data
     except Exception as e:
         logger.warning(f'Invalid token: {e}')

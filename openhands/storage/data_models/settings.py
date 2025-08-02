@@ -45,12 +45,16 @@ class Settings(BaseModel):
     max_budget_per_task: float | None = None
     email: str | None = None
     email_verified: bool | None = None
+    # Webhook settings
+    webhook_secret: SecretStr | None = None
+    webhook_allowed_repos: str | None = None
+    webhook_auto_fix: bool = False
 
     model_config = ConfigDict(
         validate_assignment=True,
     )
 
-    @field_serializer('llm_api_key', 'search_api_key')
+    @field_serializer('llm_api_key', 'search_api_key', 'webhook_secret')
     def api_key_serializer(self, api_key: SecretStr | None, info: SerializationInfo):
         """Custom serializer for API keys.
 
